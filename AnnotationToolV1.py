@@ -29,6 +29,7 @@ import sys
 '''
 Load list of img && ann
 '''
+#
 # inputpath = '190503_3' #Later receive as argument
 # annfolder = '/annotations/'
 # imgfolder = '/images/'
@@ -254,7 +255,7 @@ def Annotation(imgpath,jpgname,person_coordinate,previousImg,previousCord,frameI
 
 def main():
     cv2.startWindowThread()
-    inputpath = '190503_3' #Later receive as argument
+    inputpath = ''#'190503_3' #Later receive as argument
     annfolder = '/annotations/'
     imgfolder = '/images/'
     savefolder = '/result/'
@@ -267,7 +268,8 @@ def main():
     previousImg = 0
     previousCord=0
     idxlist=0
-    for i in range(len(annfiles)):
+    #170 error
+    for i in range(171,len(annfiles)):
         personlist=XML2personlist(annpath,annfiles[i])
         person_coordinate=locatePerson(personlist)
         img,frameIdx,jpgname=loadImg(annpath,annfiles[i],imgpath)

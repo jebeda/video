@@ -158,7 +158,7 @@ def run(frame,sequence_dir, detection_file, output_file, min_confidence,
 
     """
     #seq_info = gather_sequence_info(sequence_dir, detection_file)####
-    seq_info = sequence_dir
+    seq_info = sequence_dir#####
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
     tracker = Tracker(metric)
