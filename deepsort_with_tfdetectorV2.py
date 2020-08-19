@@ -52,18 +52,21 @@ metricFileName : Loading Cosine Metric function
 MODEL_NAME : Detection model
 
 '''
-metricFileName = 'market1501.pb'
-MODEL_NAME='ssd_resnet50_v1_fpn_tf1'
+#metric models : 'market1501.pb','MTMC.pb','ours.pb','mars-small128.pb'
+metricFileName = 'ours.pb'
+#metricFileName = 'mars-small128.pb'
+#MODEL_NAME='ssd_resnet50_v1_fpn_tf1'
+MODEL_NAME='tf1_faster_rcnn_resnet50_coco_2018_01_28'
+#MODEL_NAME = 'faster_rcnn_inception_resnet_v2_atrous_coco_2018_01_28'
+#MODEL_NAME = 'faster_rcnn_nas_coco_2018_01_28'
 PATH_TO_FROZEN_GRAPH = MODEL_NAME + '/frozen_inference_graph.pb'
-min_confidence = 0.3
-nn_budget =100
+min_confidence = 0.7
 nms_max_overlap=1.0
-
 frameIdx=0 # When video frame loaded, frameIdx is required to support MOT format. Increment in while loop
-patch_shape=None
-min_detection_height=0
-max_cosine_distance=0.2
 
+#patch_shape=None
+max_cosine_distance=0.05
+matching_threshold=0.8
 savepath='outputvideo/testRecord.txt'
 
 #for TF2
@@ -88,10 +91,12 @@ with detection_graph.as_default():
 Load video and Initialize Tracker & encoder
 '''
 #capture = cv2.VideoCapture(args.videofile)
-capture = cv2.VideoCapture('video.mp4')
+#capture = cv2.VideoCapture('video.mp4')
+capture = cv2.VideoCapture('00019.MTS')
+
 metric = nn_matching.NearestNeighborDistanceMetric(
-    "cosine",matching_threshold=0.2)
-tracker = Tracker(metric)
+    "cosine",matching_threshold=matching_threshold)
+tracker = Tracker(metric,1)
 encoder = generate_detections.create_box_encoder(metricFileName,batch_size=1)
 
 
@@ -118,7 +123,7 @@ Main function
 
 
 '''
-
+BASE_FPS=30
 
 with tf.Session(graph=detection_graph) as sess:
   # Get handles to input and output tensors
@@ -130,8 +135,18 @@ with tf.Session(graph=detection_graph) as sess:
     while capture.isOpened():
         ret, frame = capture.read()
         fps = capture.get(cv2.CAP_PROP_FPS)
+        frame_interval = BASE_FPS // fps if fps > 0 else 0
+        #print("fps:",fps)
         delay = int(1000/fps)
         frame = cv2.resize(frame,(640,640))
+        
+        if 0 < fps and frameIdx % frame_interval != 0:
+            frameIdx += 1
+            print()
+            print("Continue from frameIDx activated")
+            print()
+            continue        
+        
         '''
         From Tensorflow Object Detection API
         Below codes are used in order to get keys
@@ -182,15 +197,27 @@ with tf.Session(graph=detection_graph) as sess:
         combined=np.asarray(list(zip(boxes[:,1],boxes[:,0],boxes[:,3],boxes[:,2],det_classes,scores))) # 0to3 box 4 class 5 conf
         personDetected = np.asarray([d for d in combined if d[4]==1 and d[5]>=min_confidence])
         personDetected = ratio2realsize(frame,personDetected)
+        #personDetected = preprocessing.non_max_suppression(personDetected,1)
         #In case of no detection result, continue code is implemented
         if len(personDetected) ==0:
+            print('Cont activated')
             continue
         personDetected_box = personDetected[:,0:4]
         for kk in range(len(personDetected_box)):
             personDetected_box[kk][2]=personDetected_box[kk][2]-personDetected_box[kk][0]
             personDetected_box[kk][3]=personDetected_box[kk][3]-personDetected_box[kk][1]
+        
+        #for ks in range(len(personDetected)):
+            #cv2.rectangle(frame,(personDetected_box[ks][0],personDetected_box[ks][1]),(personDetected_box[ks][2],personDetected_box[ks][3]),(255,255,0),3)
+            #cv2.rectangle(frame,(personDetected[ks][0],personDetected[ks][1]),(personDetected[ks][3],personDetected[ks][2]),(255,255,0),3)
+            #cv2.rectangle(frame,(personDetected[ks][1],personDetected[ks][0]),(personDetected[ks][2],personDetected[ks][3]),(255,255,255),3)
+            #cv2.rectangle(frame,(personDetected[ks][3],personDetected[ks][2]),(personDetected[ks][1],personDetected[ks][0]),(255,255,255),3)
+            #cv2.putText(frame,str(ks),(int(personDetected[ks][0]), int(personDetected[ks][1])+30),0,5e-2 * 200,(255,255,255),2)        
+        
+        
         features = encoder(frame,personDetected[:,:4])
-    
+        #print('a')
+        
         ##If error occurs, need to set if statement for zero cases of detection
         detections = [Detection(box,det_class,feature) for box,det_class,feature in zip(personDetected_box,det_classes,features)]
         
@@ -198,9 +225,15 @@ with tf.Session(graph=detection_graph) as sess:
         detections_score = np.array([dlc.confidence for dlc in detections])
         detections_indices = preprocessing.non_max_suppression(detections_box,nms_max_overlap,detections_score)
         detections = [detections[i] for i in detections_indices]
+        
+        #
         tracker.predict()
         tracker.update(detections)
-        frameIdx=frameIdx+1
+        
+        
+        cv2.putText(frame,str(frameIdx),(0,30),0,5e-3 * 200,(0,255,0),2) #To check frame number
+        
+        
         '''
         Support Visualization
         
@@ -209,9 +242,12 @@ with tf.Session(graph=detection_graph) as sess:
             bbox = [max(0, int(x)) for x in track.to_tlbr()]
             cv2.rectangle(frame,(bbox[0],bbox[1]),(bbox[2],bbox[3]),(0,0,255),3)
             cv2.putText(frame,str(track.track_id),(bbox[0], bbox[1]+30),0,5e-3 * 200,(0,255,0),2)
-        frame=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        #frame=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         cv2.imshow('curvideo',frame)
         cv2.waitKey(delay)
- 
+        #if cv2.waitKey()=='':
+        #    print('y')
+        frameIdx=frameIdx+1
+        
 capture.release()
 cv2.destroyAllWindows()
